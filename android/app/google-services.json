@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "586602014687",
+    "project_id": "sma-product",
+    "storage_bucket": "sma-product.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:586602014687:android:546705208751813810c66a",
+        "android_client_info": {
+          "package_name": "com.example.sma_product"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA1Gu_MIg_CLdY-H18rYxm9--DsdFr0HIg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
