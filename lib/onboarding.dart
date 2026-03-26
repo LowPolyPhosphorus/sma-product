@@ -214,7 +214,15 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
           ),
 
           const Spacer(),
-          _buildPrimaryButton('Continue', _nextPage),
+          _buildPrimaryButton('Continue', () {
+            if (_usernameController.text.trim().length < 3) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Username must be at least 3 characters')),
+              );
+              return;
+            }
+            _nextPage();
+          }),
         ],
       ),
     );
@@ -427,8 +435,10 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   Widget _buildUsernameField() {
     return TextField(
       controller: _usernameController,
+      maxLength: 15,
       style: TextStyle(fontSize: 14, color: text),
       decoration: InputDecoration(
+        counterText: '',
         labelText: 'Username',
         prefixText: '@',
         prefixStyle: TextStyle(fontSize: 14, color: subtext, fontWeight: FontWeight.w600),
