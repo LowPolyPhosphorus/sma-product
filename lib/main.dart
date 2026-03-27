@@ -166,93 +166,250 @@ class LoginPage extends StatelessWidget {
   }
 }
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   final bool isDarkMode;
   const HomePage({super.key, this.isDarkMode = false});
 
-  Color get bg => isDarkMode ? const Color(0xFF1C1C1E) : Colors.white;
-  Color get surface => isDarkMode ? const Color(0xFF2C2C2E) : const Color(0xFFF9F9F9);
-  Color get text => isDarkMode ? Colors.white : const Color(0xFF1A1A1A);
-  Color get subtext => isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF888888);
-  Color get divider => isDarkMode ? const Color(0xFF3A3A3C) : const Color(0xFFEEEEEE);
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  int _selectedIndex = 0;
+
+  Color get bg => widget.isDarkMode ? const Color(0xFF1C1C1E) : Colors.white;
+  Color get sidebarBg => widget.isDarkMode ? const Color(0xFF2C2C2E) : const Color(0xFFF9F9F9);
+  Color get text => widget.isDarkMode ? Colors.white : const Color(0xFF1A1A1A);
+  Color get subtext => widget.isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF888888);
+  Color get dividerColor => widget.isDarkMode ? const Color(0xFF3A3A3C) : const Color(0xFFEEEEEE);
+
+  final List<Widget> _pages = const [
+    _FeedPage(),
+    _PlaceholderPage(icon: Icons.search, label: 'Search'),
+    _PlaceholderPage(icon: Icons.notifications_none, label: 'Activity'),
+    _PlaceholderPage(icon: Icons.mail_outline, label: 'Messages'),
+  ];
 
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser!;
 
-    return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
-      builder: (context, snapshot) {
-        return Scaffold(
-          backgroundColor: bg,
-          appBar: AppBar(
-            backgroundColor: bg,
-            elevation: 0,
-            centerTitle: true,
-            title: Text('Drift',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: text)),
-            actions: [
-              IconButton(
-                icon: Icon(Icons.logout, color: subtext, size: 20),
-                onPressed: () => FirebaseAuth.instance.signOut(),
-              )
-            ],
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(1),
-              child: Divider(height: 1, color: divider),
+    return Scaffold(
+      backgroundColor: bg,
+      body: Row(
+        children: [
+          // Sidebar
+          Container(
+            width: 64,
+            color: sidebarBg,
+            child: Column(
+              children: [
+                const SizedBox(height: 20),
+                // Logo
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text('D',
+                      style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: text)),
+                ),
+                const SizedBox(height: 28),
+                // Nav icons
+                _SidebarIcon(
+                  icon: Icons.home_outlined,
+                  activeIcon: Icons.home,
+                  selected: _selectedIndex == 0,
+                  onTap: () => setState(() => _selectedIndex = 0),
+                  color: text,
+                  subtext: subtext,
+                ),
+                const SizedBox(height: 4),
+                _SidebarIcon(
+                  icon: Icons.search,
+                  activeIcon: Icons.search,
+                  selected: _selectedIndex == 1,
+                  onTap: () => setState(() => _selectedIndex = 1),
+                  color: text,
+                  subtext: subtext,
+                ),
+                const SizedBox(height: 4),
+                _SidebarIcon(
+                  icon: Icons.notifications_none,
+                  activeIcon: Icons.notifications,
+                  selected: _selectedIndex == 2,
+                  onTap: () => setState(() => _selectedIndex = 2),
+                  color: text,
+                  subtext: subtext,
+                ),
+                const SizedBox(height: 4),
+                _SidebarIcon(
+                  icon: Icons.mail_outline,
+                  activeIcon: Icons.mail,
+                  selected: _selectedIndex == 3,
+                  onTap: () => setState(() => _selectedIndex = 3),
+                  color: text,
+                  subtext: subtext,
+                ),
+                const Spacer(),
+                // Settings
+                _SidebarIcon(
+                  icon: Icons.settings_outlined,
+                  activeIcon: Icons.settings,
+                  selected: false,
+                  onTap: () {},
+                  color: text,
+                  subtext: subtext,
+                ),
+                const SizedBox(height: 8),
+                // Divider above pfp
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Divider(height: 1, color: dividerColor),
+                ),
+                const SizedBox(height: 12),
+                // Profile picture
+                GestureDetector(
+                  onTap: () {},
+                  child: FutureBuilder<DocumentSnapshot>(
+                    future: FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(user.uid)
+                        .get(),
+                    builder: (context, snapshot) {
+                      final data = snapshot.data?.data() as Map<String, dynamic>?;
+                      final photoUrl = data?['photoUrl'] as String?;
+                      return CircleAvatar(
+                        radius: 16,
+                        backgroundColor: dividerColor,
+                        backgroundImage: photoUrl != null && photoUrl.isNotEmpty
+                            ? NetworkImage(photoUrl)
+                            : null,
+                        child: photoUrl == null || photoUrl.isEmpty
+                            ? Text(
+                                (data?['username'] ?? 'U')[0].toUpperCase(),
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: text),
+                              )
+                            : null,
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
             ),
           ),
-          body: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('posts')
-                .orderBy('createdAt', descending: true)
-                .limit(50)
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return Center(child: CircularProgressIndicator(color: text));
-              }
+          // Vertical divider
+          VerticalDivider(width: 1, thickness: 1, color: dividerColor),
+          // Main content
+          Expanded(child: _pages[_selectedIndex]),
+        ],
+      ),
+    );
+  }
+}
 
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text('Nothing here yet',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: text)),
-                      const SizedBox(height: 6),
-                      Text('Be the first to post',
-                          style: TextStyle(fontSize: 13, color: subtext)),
-                    ],
-                  ),
-                );
-              }
+class _SidebarIcon extends StatelessWidget {
+  final IconData icon;
+  final IconData activeIcon;
+  final bool selected;
+  final VoidCallback onTap;
+  final Color color;
+  final Color subtext;
 
-              final posts = snapshot.data!.docs;
-              return ListView.separated(
-                itemCount: posts.length,
-                separatorBuilder: (_, __) => Divider(height: 1, color: divider),
-                itemBuilder: (context, index) {
-                  final d = posts[index].data() as Map<String, dynamic>;
-                  return _PostTile(
-                    username: d['username'] ?? 'user',
-                    content: d['content'] ?? '',
-                    timestamp: d['createdAt'],
-                    isDarkMode: isDarkMode,
-                    text: text,
-                    subtext: subtext,
-                  );
-                },
-              );
-            },
-          ),
-          floatingActionButton: FloatingActionButton(
-            onPressed: () {},
-            backgroundColor: text,
-            foregroundColor: bg,
-            elevation: 0,
-            child: const Icon(Icons.add, size: 22),
-          ),
+  const _SidebarIcon({
+    required this.icon,
+    required this.activeIcon,
+    required this.selected,
+    required this.onTap,
+    required this.color,
+    required this.subtext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(10)),
+        child: Icon(
+          selected ? activeIcon : icon,
+          size: 22,
+          color: selected ? color : subtext,
+        ),
+      ),
+    );
+  }
+}
+
+class _PlaceholderPage extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _PlaceholderPage({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 36, color: const Color(0xFF888888)),
+          const SizedBox(height: 10),
+          Text(label,
+              style: const TextStyle(fontSize: 15, color: Color(0xFF888888))),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeedPage extends StatelessWidget {
+  const _FeedPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('posts')
+          .orderBy('createdAt', descending: true)
+          .limit(50)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('Nothing here yet',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                SizedBox(height: 6),
+                Text('Be the first to post',
+                    style: TextStyle(fontSize: 13, color: Color(0xFF888888))),
+              ],
+            ),
+          );
+        }
+        final posts = snapshot.data!.docs;
+        return ListView.separated(
+          itemCount: posts.length,
+          separatorBuilder: (_, __) =>
+              const Divider(height: 1, color: Color(0xFFEEEEEE)),
+          itemBuilder: (context, index) {
+            final d = posts[index].data() as Map<String, dynamic>;
+            return _PostTile(
+              username: d['username'] ?? 'user',
+              content: d['content'] ?? '',
+              timestamp: d['createdAt'],
+            );
+          },
         );
       },
     );
@@ -263,17 +420,11 @@ class _PostTile extends StatelessWidget {
   final String username;
   final String content;
   final dynamic timestamp;
-  final bool isDarkMode;
-  final Color text;
-  final Color subtext;
 
   const _PostTile({
     required this.username,
     required this.content,
     this.timestamp,
-    required this.isDarkMode,
-    required this.text,
-    required this.subtext,
   });
 
   @override
@@ -285,10 +436,13 @@ class _PostTile extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 18,
-            backgroundColor: isDarkMode ? const Color(0xFF3A3A3C) : const Color(0xFFEEEEEE),
+            backgroundColor: const Color(0xFFEEEEEE),
             child: Text(
               username.isNotEmpty ? username[0].toUpperCase() : '?',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: text),
+              style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1A1A1A)),
             ),
           ),
           const SizedBox(width: 12),
@@ -297,19 +451,26 @@ class _PostTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('@$username',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: text)),
+                    style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1A1A1A))),
                 const SizedBox(height: 4),
-                Text(content, style: TextStyle(fontSize: 14, color: text, height: 1.4)),
+                Text(content,
+                    style: const TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF1A1A1A),
+                        height: 1.4)),
                 const SizedBox(height: 10),
-                Row(
+                const Row(
                   children: [
-                    Icon(Icons.favorite_border, size: 18, color: subtext),
-                    const SizedBox(width: 16),
-                    Icon(Icons.chat_bubble_outline, size: 18, color: subtext),
-                    const SizedBox(width: 16),
-                    Icon(Icons.repeat, size: 18, color: subtext),
-                    const SizedBox(width: 16),
-                    Icon(Icons.share_outlined, size: 18, color: subtext),
+                    Icon(Icons.favorite_border, size: 18, color: Color(0xFF888888)),
+                    SizedBox(width: 16),
+                    Icon(Icons.chat_bubble_outline, size: 18, color: Color(0xFF888888)),
+                    SizedBox(width: 16),
+                    Icon(Icons.repeat, size: 18, color: Color(0xFF888888)),
+                    SizedBox(width: 16),
+                    Icon(Icons.share_outlined, size: 18, color: Color(0xFF888888)),
                   ],
                 ),
               ],

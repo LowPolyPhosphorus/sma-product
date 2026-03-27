@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:typed_data';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'main.dart';
 
 class OnboardingFlow extends StatefulWidget {
@@ -20,6 +24,8 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   final TextEditingController _displayNameController = TextEditingController();
   final TextEditingController _bioController = TextEditingController();
   bool _isDarkMode = false;
+  Uint8List? _pickedImageBytes;
+  String? _googlePhotoUrl;
 
   // Screen 2
   bool _isCreator = false;
@@ -41,6 +47,8 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   void initState() {
     super.initState();
     _limitValueController = TextEditingController(text: '30');
+    final user = FirebaseAuth.instance.currentUser;
+    _googlePhotoUrl = user?.photoURL;
   }
 
   @override
@@ -58,6 +66,15 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   Color get borderColor => _isDarkMode ? const Color(0xFF48484A) : const Color(0xFFE5E5E5);
   Color get primary => _isDarkMode ? Colors.white : const Color(0xFF1A1A1A);
   Color get primaryText => _isDarkMode ? const Color(0xFF1A1A1A) : Colors.white;
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (picked != null) {
+      final bytes = await picked.readAsBytes();
+      setState(() => _pickedImageBytes = bytes);
+    }
+  }
 
   void _nextPage() {
     if (_currentPage < 2) {
@@ -95,6 +112,29 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
+    String photoUrl = _googlePhotoUrl ?? '';
+
+    if (_pickedImageBytes != null) {
+      try {
+        final uri = Uri.parse(
+            'https://api.cloudinary.com/v1_1/dvb8b4ogj/image/upload');
+        final request = http.MultipartRequest('POST', uri)
+          ..fields['upload_preset'] = 'sma_uploads'
+          ..fields['public_id'] = 'profile_${user.uid}'
+          ..files.add(http.MultipartFile.fromBytes(
+            'file',
+            _pickedImageBytes!,
+            filename: 'profile.jpg',
+          ));
+        final response = await request.send();
+        final body = await response.stream.bytesToString();
+        final json = jsonDecode(body);
+        photoUrl = json['secure_url'] ?? photoUrl;
+      } catch (e) {
+        debugPrint('Cloudinary upload error: $e');
+      }
+    }
+
     await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
       'username': _usernameController.text.trim(),
       'displayName': _displayNameController.text.trim(),
@@ -107,6 +147,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
       'postLimit': _postLimit,
       'timeLimit': _timeLimit,
       'onboardingComplete': true,
+      'photoUrl': photoUrl,
     });
 
     if (mounted) {
@@ -156,8 +197,8 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
                     }),
                   ),
                 ),
-                SizedBox(
-                  height: 520,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 420, maxHeight: 600),
                   child: PageView(
                     controller: _pageController,
                     physics: const NeverScrollableScrollPhysics(),
@@ -176,9 +217,8 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     );
   }
 
-  // SCREEN 1 - Identity + Dark Mode
   Widget _buildIdentityPage() {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(32, 28, 32, 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -189,17 +229,43 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
           Text('Set up your profile',
               style: TextStyle(fontSize: 13, color: subtext)),
           const SizedBox(height: 24),
-
-          // Username with @ prefix
+          Center(
+            child: GestureDetector(
+              onTap: _pickImage,
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 40,
+                    backgroundColor: inputBg,
+                    backgroundImage: _pickedImageBytes != null
+                        ? MemoryImage(_pickedImageBytes!) as ImageProvider
+                        : (_googlePhotoUrl != null ? NetworkImage(_googlePhotoUrl!) : null),
+                    child: _pickedImageBytes == null && _googlePhotoUrl == null
+                        ? Icon(Icons.person, size: 36, color: subtext)
+                        : null,
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(color: primary, shape: BoxShape.circle),
+                      child: Icon(Icons.edit, size: 12, color: primaryText),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           _buildUsernameField(),
+          const SizedBox(height: 4),
+          Text('3 to 20 characters', style: TextStyle(fontSize: 11, color: subtext)),
           const SizedBox(height: 12),
           _buildTextField(_displayNameController, 'Display name', 'what people see'),
           const SizedBox(height: 12),
           _buildTextField(_bioController, 'Bio', 'optional', maxLines: 2),
-
           const SizedBox(height: 20),
-
-          // Dark mode toggle on screen 1
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -212,12 +278,11 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
               ),
             ],
           ),
-
-          const Spacer(),
+          const SizedBox(height: 24),
           _buildPrimaryButton('Continue', () {
             if (_usernameController.text.trim().length < 3) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Username must be at least 3 characters')),
+                const SnackBar(content: Text('Username must be at least 3 characters')),
               );
               return;
             }
@@ -228,7 +293,6 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     );
   }
 
-  // SCREEN 2 - Vibe
   Widget _buildVibePage() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(32, 28, 32, 28),
@@ -241,7 +305,6 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
           Text('Customize your experience',
               style: TextStyle(fontSize: 13, color: subtext)),
           const SizedBox(height: 20),
-
           Row(
             children: [
               _buildToggleChip('Just here to vibe', !_isCreator, () => setState(() => _isCreator = false)),
@@ -249,12 +312,10 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
               _buildToggleChip('Creator', _isCreator, () => setState(() => _isCreator = true)),
             ],
           ),
-
           const SizedBox(height: 20),
           Text('Interests',
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: text)),
           const SizedBox(height: 10),
-
           Wrap(
             spacing: 6,
             runSpacing: 6,
@@ -285,7 +346,6 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
               );
             }).toList(),
           ),
-
           const Spacer(),
           Row(
             children: [
@@ -299,7 +359,6 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     );
   }
 
-  // SCREEN 3 - Limit
   Widget _buildLimitPage() {
     final currentValue = _limitByTime ? _timeLimit : _postLimit;
 
@@ -314,7 +373,6 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
           Text('Friends are always unlimited. This only applies to creators and discovery.',
               style: TextStyle(fontSize: 12, color: subtext)),
           const SizedBox(height: 20),
-
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -327,7 +385,6 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
               ),
             ],
           ),
-
           if (_limitEnabled) ...[
             const SizedBox(height: 12),
             Row(
@@ -350,10 +407,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-              decoration: BoxDecoration(
-                color: inputBg,
-                borderRadius: BorderRadius.circular(12),
-              ),
+              decoration: BoxDecoration(color: inputBg, borderRadius: BorderRadius.circular(12)),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -368,8 +422,6 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
                       }
                     });
                   }),
-
-                  // Typeable value
                   SizedBox(
                     width: 80,
                     child: TextField(
@@ -377,8 +429,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
                       textAlign: TextAlign.center,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      style: TextStyle(
-                          fontSize: 20, fontWeight: FontWeight.w700, color: text),
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: text),
                       decoration: InputDecoration(
                         border: InputBorder.none,
                         hintText: currentValue.toString(),
@@ -391,7 +442,6 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
                       onChanged: _updateLimitFromText,
                     ),
                   ),
-
                   _buildCounterBtn(Icons.add, () {
                     setState(() {
                       if (_limitByTime) {
@@ -412,12 +462,10 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
               style: TextStyle(fontSize: 11, color: subtext),
             ),
           ],
-
           const Spacer(),
           TextButton(
             onPressed: _completeOnboarding,
-            child: Text('Skip for now',
-                style: TextStyle(fontSize: 12, color: subtext)),
+            child: Text('Skip for now', style: TextStyle(fontSize: 12, color: subtext)),
           ),
           const SizedBox(height: 6),
           Row(
@@ -435,10 +483,10 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   Widget _buildUsernameField() {
     return TextField(
       controller: _usernameController,
-      maxLength: 15,
+      maxLength: 20,
       style: TextStyle(fontSize: 14, color: text),
       decoration: InputDecoration(
-        counterText: '',
+        counterStyle: TextStyle(fontSize: 11, color: subtext),
         labelText: 'Username',
         prefixText: '@',
         prefixStyle: TextStyle(fontSize: 14, color: subtext, fontWeight: FontWeight.w600),
@@ -448,18 +496,9 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
         filled: true,
         fillColor: inputBg,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: borderColor),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: borderColor),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: primary, width: 1.5),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: borderColor)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: borderColor)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: primary, width: 1.5)),
       ),
     );
   }
@@ -477,18 +516,9 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
         filled: true,
         fillColor: inputBg,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: borderColor),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: borderColor),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: primary, width: 1.5),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: borderColor)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: borderColor)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: primary, width: 1.5)),
       ),
     );
   }
@@ -515,10 +545,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
       child: Container(
         height: 42,
         width: 42,
-        decoration: BoxDecoration(
-          color: inputBg,
-          borderRadius: BorderRadius.circular(10),
-        ),
+        decoration: BoxDecoration(color: inputBg, borderRadius: BorderRadius.circular(10)),
         child: Icon(Icons.arrow_back, size: 18, color: text),
       ),
     );
@@ -534,10 +561,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(label,
-            style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: selected ? primaryText : subtext)),
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: selected ? primaryText : subtext)),
       ),
     );
   }
@@ -547,10 +571,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: primary,
-          borderRadius: BorderRadius.circular(8),
-        ),
+        decoration: BoxDecoration(color: primary, borderRadius: BorderRadius.circular(8)),
         child: Icon(icon, size: 16, color: primaryText),
       ),
     );
