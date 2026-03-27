@@ -270,17 +270,56 @@ class _HomePageState extends State<HomePage> {
                 ),
                 const SizedBox(height: 12),
                 // Profile picture
-                _HoverablePfp(
-                  uid: user.uid,
-                  dividerColor: dividerColor,
-                  text: text,
+                GestureDetector(
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => ProfileShell(isDarkMode: widget.isDarkMode),
+                        builder: (_) => Scaffold(
+                          backgroundColor: bg,
+                          appBar: AppBar(
+                            backgroundColor: bg,
+                            elevation: 0,
+                            leading: IconButton(
+                              icon: Icon(Icons.arrow_back, color: text),
+                              onPressed: () => Navigator.of(context).pop(),
+                            ),
+                            title: Text('Profile',
+                                style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: text)),
+                          ),
+                          body: ProfilePage(isDarkMode: widget.isDarkMode),
+                        ),
                       ),
                     );
                   },
+                  child: FutureBuilder<DocumentSnapshot>(
+                    future: FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(user.uid)
+                        .get(),
+                    builder: (context, snapshot) {
+                      final data = snapshot.data?.data() as Map<String, dynamic>?;
+                      final photoUrl = data?['photoUrl'] as String?;
+                      return CircleAvatar(
+                        radius: 16,
+                        backgroundColor: dividerColor,
+                        backgroundImage: photoUrl != null && photoUrl.isNotEmpty
+                            ? NetworkImage(photoUrl)
+                            : null,
+                        child: photoUrl == null || photoUrl.isEmpty
+                            ? Text(
+                                (data?['username'] ?? 'U')[0].toUpperCase(),
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: text),
+                              )
+                            : null,
+                      );
+                    },
+                  ),
                 ),
                 const SizedBox(height: 20),
               ],
@@ -461,69 +500,6 @@ class _PostTile extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _HoverablePfp extends StatefulWidget {
-  final String uid;
-  final Color dividerColor;
-  final Color text;
-  final VoidCallback onTap;
-
-  const _HoverablePfp({
-    required this.uid,
-    required this.dividerColor,
-    required this.text,
-    required this.onTap,
-  });
-
-  @override
-  State<_HoverablePfp> createState() => _HoverablePfpState();
-}
-
-class _HoverablePfpState extends State<_HoverablePfp> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: FutureBuilder<DocumentSnapshot>(
-          future: FirebaseFirestore.instance
-              .collection('users')
-              .doc(widget.uid)
-              .get(),
-          builder: (context, snapshot) {
-            final data = snapshot.data?.data() as Map<String, dynamic>?;
-            final photoUrl = data?['photoUrl'] as String? ?? '';
-            final username = (data?['username'] as String? ?? 'U');
-            return AnimatedOpacity(
-              duration: const Duration(milliseconds: 150),
-              opacity: _hovered ? 0.75 : 1.0,
-              child: CircleAvatar(
-                radius: 16,
-                backgroundColor: widget.dividerColor,
-                backgroundImage:
-                    photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-                child: photoUrl.isEmpty
-                    ? Text(
-                        username[0].toUpperCase(),
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: widget.text),
-                      )
-                    : null,
-              ),
-            );
-          },
-        ),
       ),
     );
   }
