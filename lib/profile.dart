@@ -606,7 +606,8 @@ class _StatColumn extends StatelessWidget {
     required this.text,
     required this.subtext,
   });
-
+  
+  
   @override
   Widget build(BuildContext context) {
     return Column(
