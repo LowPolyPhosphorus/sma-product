@@ -39,7 +39,7 @@ During onboarding you choose your mode. Regular users get the friend-first exper
 ## Core Features (Planned)
 
 - [x] Google Sign In via Firebase Auth
-- [ ] Username + onboarding flow
+- [x] Username + onboarding flow
 - [ ] Chronological fair feed
 - [ ] Daily digest limit (posts or time)
 - [ ] Friend vs creator content separation
